@@ -2,7 +2,7 @@
 
 Le socle réseau des jeux Wi-Fi de piascwal ([Face-Off](https://github.com/piascwal/face-off),
 [Bandeja](https://github.com/piascwal/bandeja)) : **un appareil héberge, les autres le trouvent
-sur le même Wi-Fi, sans saisir d'adresse IP**, sans aucun serveur à déployer.
+sur le même Wi-Fi, sans saisir d'adresse IP, ou par Internet avec un code de salon**, sans aucun serveur à déployer.
 
 Ce paquet ne contient **rien de spécifique à un jeu** : ni messages, ni état de partie, ni
 sièges. Chaque jeu garde son protocole et sa logique ; `lan-kit` ne fait que mettre en relation
@@ -21,13 +21,37 @@ le montage (détaillé dans le README de Face-Off) :
 | Se protéger d'un appareil bavard               | seau à jetons par appareil                                                                                                              | `limiteur`                      |
 | Savoir si le pair est vivant                   | ping/pong, latence, coupure après 6 s de silence                                                                                        | `veille`                        |
 
+## Jeu par Internet (depuis 0.2.0)
+
+Toujours **sans serveur à vous** : l'hôte crée un salon et obtient un **code** (`NYXK-4K7P`) ou
+un **lien d'invitation** (le code est dans le fragment `#salon=`, jamais envoyé à un serveur).
+Les autres le saisissent.
+
+```ts
+const code = genereCode(); // l'hôte, à communiquer
+const salon = await salonEnLigne(APP, code); // chez tous : même code → même salon et même clé
+const annuaire = new Annuaire({ app: APP, salons: [salon], valideContenu, testament: true });
+// ... puis comme sur le Wi-Fi ; la liaison accepte les candidats publics :
+const liaison = new Liaison(false, [], { enLigne: true });
+```
+
+- Le code dérive (PBKDF2, 210 000 itérations) la clé AES-GCM et le nom du salon : les serveurs
+  MQTT publics ne voient que du chiffré, et un essai de code coûte un calcul lent.
+- 31 symboles sans ambiguïté (ni 0, O, 1, I, L), 8 par code : près de 40 bits.
+- Tout le trafic de jeu reste chiffré de bout en bout (DTLS).
+- **Exposition :** chaque joueur voit l'adresse IP des autres (inhérent au pair à pair). Les
+  réseaux qui bloquent le pair à pair (environ 15 à 20 %) demandent un relais TURN : voir
+  [docs/TURN.md](docs/TURN.md), déjà prévu (`serveursIce`).
+- `Veille` accepte un silence toléré plus long (3e paramètre) ; `nettoiePseudo`, `qualitePing`
+  et `texteLatence` aident les jeux à afficher pseudos et pings.
+
 ## Utiliser
 
 Dépendance Git, **figée sur une étiquette** : une correction ici ne change rien à un jeu tant
 qu'il n'a pas mis à jour sa dépendance.
 
 ```bash
-npm install github:piascwal/lan-kit#v0.1.0
+npm install github:piascwal/lan-kit#v0.2.0
 ```
 
 Le paquet est livré en **TypeScript source** (pas de compilation) : le Vite du jeu le compile.
@@ -64,7 +88,7 @@ vient du réseau est suspect, même chiffré : c'est au jeu de borner ses propre
 - Tout le trafic de jeu est chiffré par DTLS (WebRTC).
 
 Limites connues : un Wi-Fi « invités » qui isole les appareils, ou un réseau qui bloque STUN,
-empêche la liaison ; le jeu par Internet est volontairement impossible.
+empêche la liaison ; le jeu par Internet passe par un code de salon (voir plus haut).
 
 ## Développer
 
@@ -76,7 +100,7 @@ npm run typecheck && npm run lint && npm run format:check && npm test
 - Aucun fichier au-delà de 300 lignes de code (ESLint `max-lines`).
 - Toute modification de comportement s'accompagne d'un test ; un changement **incompatible**
   (signature, format de salon) donne une nouvelle version mineure (0.x) et une étiquette.
-- Les jeux fixent une version : `v0.1.0` → tag `v0.1.0`.
+- Les jeux fixent une version : `v0.2.0` → tag `v0.2.0`.
 
 ## Licence
 

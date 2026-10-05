@@ -17,9 +17,11 @@ export class Veille {
   constructor(
     private readonly liaison: Liaison,
     surSilence: () => void,
+    /** silence toléré avant coupure : plus long sur Internet, où la latence varie davantage */
+    private readonly silenceMaxMs = SILENCE_MAX_MS,
   ) {
     this.minuteur = setInterval(() => {
-      if (performance.now() - this.dernierRecu > SILENCE_MAX_MS) surSilence();
+      if (performance.now() - this.dernierRecu > this.silenceMaxMs) surSilence();
       else liaison.envoieCtrl({ t: 'ping', k: performance.now() });
     }, PING_MS);
   }

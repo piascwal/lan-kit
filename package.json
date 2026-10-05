@@ -1,6 +1,6 @@
 {
   "name": "@piascwal/lan-kit",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Socle réseau des jeux Wi-Fi de piascwal : découverte sans IP, liaison WebRTC locale, MQTT public comme boîte aux lettres.",
   "type": "module",

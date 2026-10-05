@@ -77,6 +77,17 @@ export function filtreSdpLocal(
  * publiques). `plageStricte` n'est relâché qu'en développement (tests sur une
  * machine dont l'adresse n'est pas dans une plage privée).
  */
+export interface OptionsLiaison {
+  /**
+   * Jeu par Internet : on accepte aussi les candidats publics (adresses des
+   * joueurs, vues par STUN). Chaque joueur voit alors l'adresse IP des autres,
+   * c'est inhérent au pair à pair ; un relais TURN (`serveursIce`) la masquerait.
+   */
+  enLigne?: boolean;
+  /** Serveurs ICE en plus du STUN public, notamment un relais TURN (voir docs/TURN.md). */
+  serveursIce?: RTCIceServer[];
+}
+
 export class Liaison {
   readonly pc: RTCPeerConnection;
   readonly ctrl: RTCDataChannel;
@@ -85,12 +96,20 @@ export class Liaison {
   onJeu: (data: ArrayBuffer) => void = () => {};
   onFerme: () => void = () => {};
   private fermee = false;
+  private readonly enLigne: boolean;
 
   constructor(
     private readonly plageStricte = true,
     private readonly ipsPubliques: readonly string[] = [],
+    options: OptionsLiaison = {},
   ) {
-    this.pc = new RTCPeerConnection({ iceServers: ipsPubliques.length ? [{ urls: SERVEURS_STUN }] : [] });
+    this.enLigne = options.enLigne ?? false;
+    this.pc = new RTCPeerConnection({
+      iceServers: [
+        ...(ipsPubliques.length || this.enLigne ? [{ urls: SERVEURS_STUN }] : []),
+        ...(options.serveursIce ?? []),
+      ],
+    });
     this.ctrl = this.pc.createDataChannel('ctrl', { negotiated: true, id: 0, ordered: true });
     this.jeu = this.pc.createDataChannel('jeu', {
       negotiated: true,
@@ -120,6 +139,11 @@ export class Liaison {
     };
   }
 
+  /** En ligne tout candidat est bon ; sur le Wi-Fi, seuls ceux du réseau local. */
+  private filtre(sdp: string): string {
+    return this.enLigne ? sdp : filtreSdpLocal(sdp, this.plageStricte, this.ipsPubliques);
+  }
+
   /** Attend la fin de la collecte des candidats (pas d'échange au fil de l'eau : un seul message chacun). */
   private async descriptionComplete(delaiMs = 2500): Promise<string> {
     if (this.pc.iceGatheringState !== 'complete') {
@@ -133,7 +157,7 @@ export class Liaison {
         });
       });
     }
-    return filtreSdpLocal(this.pc.localDescription!.sdp, this.plageStricte, this.ipsPubliques);
+    return this.filtre(this.pc.localDescription!.sdp);
   }
 
   async creeOffre(): Promise<string> {
@@ -144,7 +168,7 @@ export class Liaison {
   async accepteOffre(sdp: string): Promise<string> {
     await this.pc.setRemoteDescription({
       type: 'offer',
-      sdp: filtreSdpLocal(sdp, this.plageStricte, this.ipsPubliques),
+      sdp: this.filtre(sdp),
     });
     await this.pc.setLocalDescription(await this.pc.createAnswer());
     return this.descriptionComplete();
@@ -153,7 +177,7 @@ export class Liaison {
   async accepteReponse(sdp: string): Promise<void> {
     await this.pc.setRemoteDescription({
       type: 'answer',
-      sdp: filtreSdpLocal(sdp, this.plageStricte, this.ipsPubliques),
+      sdp: this.filtre(sdp),
     });
   }
 
